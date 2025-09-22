@@ -1,51 +1,86 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Dino Barriers Game — Stable Collision</title>
+  <title>Dino Immigration Challenges</title>
   <style>
-    body { margin:0; background:#f4f4f4; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; font-family:Arial, sans-serif; }
-    canvas { background:#fff; border:2px solid #333; max-width:100%; touch-action:none; }
-    #controls { display:flex; gap:8px; margin-top:10px; }
-    button { padding:12px 28px; font-size:18px; font-weight:700; border:none; border-radius:10px; cursor:pointer; color:#fff; }
-    #jumpBtn { background:#4caf50; }
-    #jumpBtn:active { background:#388e3c; }
-    #restartBtn { background:#f44336; display:none; }
+    body {
+      margin: 0;
+      background: #f4f4f4;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      font-family: Arial, sans-serif;
+    }
+    h1 {
+      margin: 10px 0;
+    }
+    canvas {
+      background: #fff;
+      border: 2px solid #333;
+      max-width: 100%;
+      touch-action: none;
+    }
+    #controls {
+      display: flex;
+      gap: 8px;
+      margin: 10px 0;
+    }
+    button {
+      padding: 12px 28px;
+      font-size: 18px;
+      font-weight: 700;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      color: #fff;
+    }
+    #jumpBtn { background: #4caf50; }
+    #jumpBtn:active { background: #388e3c; }
+    #restartBtn { background: #f44336; display: none; }
+    #instructions {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #333;
+    }
   </style>
 </head>
 <body>
+  <h1>Challenges in EU immigration</h1>
   <canvas id="gameCanvas" width="800" height="300"></canvas>
   <div id="controls">
     <button id="jumpBtn">JUMP</button>
     <button id="restartBtn">RESTART</button>
   </div>
+  <div id="instructions">
+    Jump via tap. Double and triple tap for bigger jumps. See if you'll make it till integration.
+  </div>
 
   <script>
   (function(){
-    // === constants ===
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const jumpBtn = document.getElementById('jumpBtn');
     const restartBtn = document.getElementById('restartBtn');
 
-    const GROUND_Y = 240;          // линия земли
-    const SPAWN_GAP = 190;         // ↑ немного увеличили расстояние между барьерами
-    const LABEL_OFFSET = 6;        // подпись под препятствием
+    const GROUND_Y = 240;
+    const SPAWN_GAP = 180;
+    const LABEL_OFFSET = 6;
 
-    // === images with fallback & logs ===
+    // картинки
     const dinoImg = new Image();
     const barrierImg = new Image();
-    let dinoLoaded = false, barrierLoaded = false;
-    dinoImg.onload = ()=>{ dinoLoaded = true; console.log('✅ dino.png loaded'); };
-    dinoImg.onerror = e=>{ console.warn('⚠ dino.png not found — using fallback', e); };
+    let dinoLoaded=false, barrierLoaded=false;
+
+    dinoImg.onload = ()=>{ dinoLoaded=true; };
     dinoImg.src = './dino.png';
 
-    barrierImg.onload = ()=>{ barrierLoaded = true; console.log('✅ barrier.png loaded'); };
-    barrierImg.onerror = e=>{ console.warn('⚠ barrier.png not found — using fallback', e); };
+    barrierImg.onload = ()=>{ barrierLoaded=true; };
     barrierImg.src = './barrier.png';
 
-    // === player ===
+    // игрок
     const defaultDino = {
       x: 50, y: GROUND_Y - 50, width: 50, height: 50,
       dy: 0, gravity: 1.2, jumpPower: -18,
@@ -53,50 +88,49 @@
     };
     let dino = { ...defaultDino };
 
-    // === barriers sequence ===
+    // барьеры
     const barriers = [
-      { text: 'Sandbox Acceptance' },
-      { text: 'Regulatory Compliance' },
-      { text: 'EHDS Compliance' },
-      { text: 'R&D' },
-      { text: 'Compliance for Medical Devices' },
-      { text: 'Patenting' },
-      { text: 'Pre-Launch' },
-      { text: 'Launch' }
+      { text: 'Fighting bureaucracy' },
+      { text: 'Finding a flat' },
+      { text: 'Job search' },
+      { text: 'Taxes and bills' },
+      { text: 'Surviving the weather' },
+      { text: 'Finding your circle' },
+      { text: 'Learning the language' }
     ];
 
-    // === game state ===
     let obstacles = [];
     let nextBarrierIndex = 0;
-    let spawnDistance = 0;       // дистанция до следующего спавна
-    let gameSpeed = 3.8;         // чуть быстрее для уверенного контакта
+    let spawnDistance = 0;
+    let gameSpeed = 3.8;
     let score = 0;
     let gameOver = false;
     let gameWin = false;
     let rafId = null;
 
-    // === spawn single obstacle per barrier ===
     function spawnObstacle(){
       if (nextBarrierIndex >= barriers.length) return;
       const index = nextBarrierIndex;
-      const baseWidth = 42 + index * 9;      // небольшая вариация размеров
-      const baseHeight = 42 + index * 5;
-      obstacles.push({
+      const baseWidth = 40 + index * 10;
+      const baseHeight = 40 + index * 6;
+
+      const obstacle = {
         x: canvas.width,
         y: GROUND_Y,
         width: baseWidth,
         height: baseHeight,
         label: barriers[index].text,
         counted: false
-      });
+      };
+      obstacles.push(obstacle);
       nextBarrierIndex++;
     }
 
-    // === rendering ===
     function drawDino(){
       if (dinoLoaded) ctx.drawImage(dinoImg, dino.x, dino.y, dino.width, dino.height);
       else { ctx.fillStyle = '#4caf50'; ctx.fillRect(dino.x, dino.y, dino.width, dino.height); }
     }
+
     function drawObstacles(){
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
@@ -109,12 +143,6 @@
       }
     }
 
-    // === helpers ===
-    function rectsIntersect(ax, ay, aw, ah, bx, by, bw, bh){
-      return ax < bx + bw && ax + aw > bx && ay < by && ay + ah > by - bh;
-    }
-
-    // === update ===
     function updateObstacles(){
       for (const o of obstacles){
         o.x -= gameSpeed;
@@ -123,7 +151,6 @@
       obstacles = obstacles.filter(o => o.x + o.width >= 0);
       if (nextBarrierIndex >= barriers.length && obstacles.length === 0) gameWin = true;
 
-      // спавн по дистанции
       if (nextBarrierIndex < barriers.length){
         spawnDistance += gameSpeed;
         if (spawnDistance >= SPAWN_GAP){
@@ -135,24 +162,22 @@
 
     function checkCollision(){
       for (const o of obstacles){
-        if (rectsIntersect(dino.x, dino.y, dino.width, dino.height,
-                           o.x, o.y, o.width, o.height)){
-          return true;
-        }
+        const collide = dino.x < o.x + o.width &&
+                        dino.x + dino.width > o.x &&
+                        dino.y < o.y &&
+                        dino.y + dino.height > o.y - o.height;
+        if (collide) return true;
       }
       return false;
     }
 
-    // === main loop ===
     function gameLoop(){
       ctx.clearRect(0,0,canvas.width,canvas.height);
-      // ground
       ctx.fillStyle = '#888';
       ctx.fillRect(0, GROUND_Y, canvas.width, 5);
 
       if (gameOver){
         ctx.fillStyle = '#000'; ctx.font = '30px Arial';
-        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
         ctx.fillText('Game Over!', canvas.width/2 - 70, canvas.height/2);
         ctx.font = '18px Arial'; ctx.fillText(`Score: ${score}`, canvas.width/2 - 40, canvas.height/2 + 30);
         restartBtn.style.display = 'inline-block';
@@ -160,14 +185,12 @@
       }
       if (gameWin){
         ctx.fillStyle = '#000'; ctx.font = '30px Arial';
-        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
         ctx.fillText('You Win!', canvas.width/2 - 60, canvas.height/2);
         ctx.font = '18px Arial'; ctx.fillText(`Score: ${score}`, canvas.width/2 - 40, canvas.height/2 + 30);
         restartBtn.style.display = 'inline-block';
         return;
       }
 
-      // physics
       dino.y += dino.dy;
       if (dino.y + dino.height < GROUND_Y){ dino.dy += dino.gravity; dino.grounded = false; }
       else { dino.dy = 0; dino.grounded = true; dino.y = GROUND_Y - dino.height; dino.jumpsLeft = dino.maxJumps; }
@@ -176,19 +199,15 @@
       drawObstacles();
       updateObstacles();
 
-      // HUD score
-      ctx.fillStyle = '#000'; ctx.font = '16px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.fillText(`Score: ${score}`, 10, 10);
+      ctx.fillStyle = '#000'; ctx.font = '16px Arial';
+      ctx.textAlign = 'right';
+      ctx.fillText(`Score: ${score}`, canvas.width - 20, 10);
 
-      // ✅ проверка столкновений — после отрисовки и обновления позиций
-      if (checkCollision()) {
-        gameOver = true;
-      }
+      if (checkCollision()) { gameOver = true; }
 
       rafId = requestAnimationFrame(gameLoop);
     }
 
-    // === controls ===
     function jump(){
       if (dino.jumpsLeft > 0 && !gameOver && !gameWin){
         dino.dy = dino.jumpPower; dino.jumpsLeft--;
@@ -201,7 +220,6 @@
       nextBarrierIndex = 0;
       spawnDistance = 0;
       score = 0;
-      gameSpeed = 3.8;
       gameOver = false; gameWin = false;
       restartBtn.style.display = 'none';
       rafId = requestAnimationFrame(gameLoop);
@@ -215,7 +233,6 @@
     restartBtn.addEventListener('click', restartGame);
     canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); jump(); }, { passive:false });
 
-    // start
     rafId = requestAnimationFrame(gameLoop);
   })();
   </script>
