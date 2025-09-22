@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Dino Immigration Challenges</title>
+  <title>Dino Immigration Challenges — Stable Build</title>
   <style>
+    :root { --ui-gap: 10px; }
     body {
       margin: 0;
       background: #f4f4f4;
@@ -12,22 +13,18 @@
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
-      font-family: Arial, sans-serif;
+      min-height: 100vh;
+      font-family: Arial, Helvetica, sans-serif;
     }
-    h1 {
-      margin: 10px 0;
-    }
+    h1 { margin: 12px 0; font-size: 20px; }
     canvas {
       background: #fff;
       border: 2px solid #333;
       max-width: 100%;
       touch-action: none;
+      display: block;
     }
-    #controls {
-      display: flex;
-      gap: 8px;
-      margin: 10px 0;
-    }
+    #controls { display: flex; gap: 8px; margin: var(--ui-gap) 0; }
     button {
       padding: 12px 28px;
       font-size: 18px;
@@ -40,11 +37,8 @@
     #jumpBtn { background: #4caf50; }
     #jumpBtn:active { background: #388e3c; }
     #restartBtn { background: #f44336; display: none; }
-    #instructions {
-      margin-top: 15px;
-      font-size: 14px;
-      color: #333;
-    }
+    #instructions { margin: 8px 0 16px; font-size: 14px; color: #333; text-align: center; }
+    #errorBanner { display:none; margin-top:8px; padding:8px 12px; background:#ffe7e7; color:#b00020; border:1px solid #ffbfbf; border-radius:8px; font-size:13px; max-width:800px; }
   </style>
 </head>
 <body>
@@ -54,41 +48,47 @@
     <button id="jumpBtn">JUMP</button>
     <button id="restartBtn">RESTART</button>
   </div>
-  <div id="instructions">
-    Jump via tap. Double and triple tap for bigger jumps. See if you'll make it till integration.
-  </div>
+  <div id="instructions">Jump via tap. Double and triple tap for bigger jumps. See if you'll make it till integration.</div>
+  <div id="errorBanner"></div>
 
   <script>
-  (function(){
+  // Start only after DOM is ready
+  document.addEventListener('DOMContentLoaded', function(){
+    'use strict';
+
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const jumpBtn = document.getElementById('jumpBtn');
     const restartBtn = document.getElementById('restartBtn');
+    const errorBanner = document.getElementById('errorBanner');
 
+    // ---- CONFIG ----
     const GROUND_Y = 240;
-    const SPAWN_GAP = 180;
-    const LABEL_OFFSET = 6;
+    const SPAWN_GAP = 220;     // расстояние между барьерами (проще перепрыгивать)
+    const LABEL_OFFSET = 6;    // подпись под препятствием
 
-    // картинки
+    // ---- ASSETS (with fallback) ----
     const dinoImg = new Image();
     const barrierImg = new Image();
-    let dinoLoaded=false, barrierLoaded=false;
+    let dinoLoaded = false, barrierLoaded = false;
 
-    dinoImg.onload = ()=>{ dinoLoaded=true; };
+    dinoImg.onload = function(){ dinoLoaded = true; console.log('✅ dino.png loaded'); };
+    dinoImg.onerror = function(e){ console.warn('⚠ dino.png not found — using fallback', e); };
     dinoImg.src = './dino.png';
 
-    barrierImg.onload = ()=>{ barrierLoaded=true; };
+    barrierImg.onload = function(){ barrierLoaded = true; console.log('✅ barrier.png loaded'); };
+    barrierImg.onerror = function(e){ console.warn('⚠ barrier.png not found — using fallback', e); };
     barrierImg.src = './barrier.png';
 
-    // игрок
+    // ---- PLAYER ----
     const defaultDino = {
       x: 50, y: GROUND_Y - 50, width: 50, height: 50,
-      dy: 0, gravity: 1.2, jumpPower: -18,
+      dy: 0, gravity: 1.2, jumpPower: -20,   // выше прыжок
       grounded: true, maxJumps: 3, jumpsLeft: 3
     };
-    let dino = { ...defaultDino };
+    let dino = Object.assign({}, defaultDino);
 
-    // барьеры
+    // ---- BARRIERS LIST ----
     const barriers = [
       { text: 'Fighting bureaucracy' },
       { text: 'Finding a flat' },
@@ -99,6 +99,7 @@
       { text: 'Learning the language' }
     ];
 
+    // ---- GAME STATE ----
     let obstacles = [];
     let nextBarrierIndex = 0;
     let spawnDistance = 0;
@@ -108,34 +109,39 @@
     let gameWin = false;
     let rafId = null;
 
+    function showError(msg){
+      errorBanner.textContent = 'Error: ' + msg;
+      errorBanner.style.display = 'block';
+    }
+
+    // ---- SPAWN ----
     function spawnObstacle(){
       if (nextBarrierIndex >= barriers.length) return;
       const index = nextBarrierIndex;
-      const baseWidth = 40 + index * 10;
-      const baseHeight = 40 + index * 6;
-
-      const obstacle = {
+      const baseWidth  = 40 + index * 10;   // каждый следующий чуть шире
+      const baseHeight = 40 + index * 6;    // и выше
+      obstacles.push({
         x: canvas.width,
         y: GROUND_Y,
         width: baseWidth,
         height: baseHeight,
         label: barriers[index].text,
         counted: false
-      };
-      obstacles.push(obstacle);
-      nextBarrierIndex++;
+      });
+      nextBarrierIndex += 1;
     }
 
+    // ---- RENDER ----
     function drawDino(){
       if (dinoLoaded) ctx.drawImage(dinoImg, dino.x, dino.y, dino.width, dino.height);
       else { ctx.fillStyle = '#4caf50'; ctx.fillRect(dino.x, dino.y, dino.width, dino.height); }
     }
-
     function drawObstacles(){
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.font = '14px Arial';
-      for (const o of obstacles){
+      for (var i=0;i<obstacles.length;i++){
+        var o = obstacles[i];
         if (barrierLoaded) ctx.drawImage(barrierImg, o.x, o.y - o.height, o.width, o.height);
         else { ctx.fillStyle = '#f44336'; ctx.fillRect(o.x, o.y - o.height, o.width, o.height); }
         ctx.fillStyle = '#000';
@@ -143,98 +149,112 @@
       }
     }
 
+    // ---- UPDATE ----
     function updateObstacles(){
-      for (const o of obstacles){
+      for (var i=0;i<obstacles.length;i++){
+        var o = obstacles[i];
         o.x -= gameSpeed;
         if (!o.counted && (o.x + o.width) < dino.x){ score += 1; o.counted = true; }
       }
-      obstacles = obstacles.filter(o => o.x + o.width >= 0);
+      // убрать ушедшие
+      obstacles = obstacles.filter(function(o){ return (o.x + o.width) >= 0; });
+
+      // победа
       if (nextBarrierIndex >= barriers.length && obstacles.length === 0) gameWin = true;
 
+      // спавн по дистанции
       if (nextBarrierIndex < barriers.length){
         spawnDistance += gameSpeed;
-        if (spawnDistance >= SPAWN_GAP){
-          spawnObstacle();
-          spawnDistance = 0;
-        }
+        if (spawnDistance >= SPAWN_GAP){ spawnObstacle(); spawnDistance = 0; }
       }
     }
 
     function checkCollision(){
-      for (const o of obstacles){
-        const collide = dino.x < o.x + o.width &&
-                        dino.x + dino.width > o.x &&
-                        dino.y < o.y &&
-                        dino.y + dino.height > o.y - o.height;
+      for (var i=0;i<obstacles.length;i++){
+        var o = obstacles[i];
+        var collide = (dino.x < o.x + o.width) &&
+                      (dino.x + dino.width > o.x) &&
+                      (dino.y < o.y) &&
+                      (dino.y + dino.height > o.y - o.height);
         if (collide) return true;
       }
       return false;
     }
 
+    // ---- MAIN LOOP ----
     function gameLoop(){
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.fillStyle = '#888';
-      ctx.fillRect(0, GROUND_Y, canvas.width, 5);
+      try {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        // ground
+        ctx.fillStyle = '#888';
+        ctx.fillRect(0, GROUND_Y, canvas.width, 5);
 
-      if (gameOver){
-        ctx.fillStyle = '#000'; ctx.font = '30px Arial';
-        ctx.fillText('Game Over!', canvas.width/2 - 70, canvas.height/2);
-        ctx.font = '18px Arial'; ctx.fillText(`Score: ${score}`, canvas.width/2 - 40, canvas.height/2 + 30);
-        restartBtn.style.display = 'inline-block';
-        return;
+        if (gameOver){
+          ctx.fillStyle = '#000'; ctx.font = '30px Arial';
+          ctx.fillText('Game Over!', canvas.width/2 - 70, canvas.height/2);
+          ctx.font = '18px Arial'; ctx.fillText('Score: ' + score, canvas.width/2 - 40, canvas.height/2 + 30);
+          restartBtn.style.display = 'inline-block';
+          return;
+        }
+        if (gameWin){
+          ctx.fillStyle = '#000'; ctx.font = '30px Arial';
+          ctx.fillText('You Win!', canvas.width/2 - 60, canvas.height/2);
+          ctx.font = '18px Arial'; ctx.fillText('Score: ' + score, canvas.width/2 - 40, canvas.height/2 + 30);
+          restartBtn.style.display = 'inline-block';
+          return;
+        }
+
+        // physics
+        dino.y += dino.dy;
+        if (dino.y + dino.height < GROUND_Y){ dino.dy += dino.gravity; dino.grounded = false; }
+        else { dino.dy = 0; dino.grounded = true; dino.y = GROUND_Y - dino.height; dino.jumpsLeft = dino.maxJumps; }
+
+        drawDino();
+        drawObstacles();
+        updateObstacles();
+
+        // HUD (справа сверху)
+        ctx.fillStyle = '#000'; ctx.font = '16px Arial'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+        ctx.fillText('Score: ' + score, canvas.width - 20, 10);
+
+        if (checkCollision()) { gameOver = true; }
+
+        rafId = window.requestAnimationFrame(gameLoop);
+      } catch(err){
+        console.error(err);
+        showError(err && err.message ? err.message : String(err));
       }
-      if (gameWin){
-        ctx.fillStyle = '#000'; ctx.font = '30px Arial';
-        ctx.fillText('You Win!', canvas.width/2 - 60, canvas.height/2);
-        ctx.font = '18px Arial'; ctx.fillText(`Score: ${score}`, canvas.width/2 - 40, canvas.height/2 + 30);
-        restartBtn.style.display = 'inline-block';
-        return;
-      }
-
-      dino.y += dino.dy;
-      if (dino.y + dino.height < GROUND_Y){ dino.dy += dino.gravity; dino.grounded = false; }
-      else { dino.dy = 0; dino.grounded = true; dino.y = GROUND_Y - dino.height; dino.jumpsLeft = dino.maxJumps; }
-
-      drawDino();
-      drawObstacles();
-      updateObstacles();
-
-      ctx.fillStyle = '#000'; ctx.font = '16px Arial';
-      ctx.textAlign = 'right';
-      ctx.fillText(`Score: ${score}`, canvas.width - 20, 10);
-
-      if (checkCollision()) { gameOver = true; }
-
-      rafId = requestAnimationFrame(gameLoop);
     }
 
+    // ---- CONTROLS ----
     function jump(){
-      if (dino.jumpsLeft > 0 && !gameOver && !gameWin){
-        dino.dy = dino.jumpPower; dino.jumpsLeft--;
-      }
+      if (dino.jumpsLeft > 0 && !gameOver && !gameWin){ dino.dy = dino.jumpPower; dino.jumpsLeft -= 1; }
     }
     function restartGame(){
-      if (rafId) cancelAnimationFrame(rafId);
-      dino = { ...defaultDino };
+      if (rafId) window.cancelAnimationFrame(rafId);
+      dino = Object.assign({}, defaultDino);
       obstacles = [];
       nextBarrierIndex = 0;
       spawnDistance = 0;
       score = 0;
       gameOver = false; gameWin = false;
       restartBtn.style.display = 'none';
-      rafId = requestAnimationFrame(gameLoop);
+      errorBanner.style.display = 'none';
+      rafId = window.requestAnimationFrame(gameLoop);
     }
 
-    document.addEventListener('keydown', (e)=>{
+    document.addEventListener('keydown', function(e){
       if (e.code === 'Space' || e.code === 'ArrowUp') jump();
       if (e.code === 'KeyR' && (gameOver || gameWin)) restartGame();
     });
     jumpBtn.addEventListener('click', jump);
     restartBtn.addEventListener('click', restartGame);
-    canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); jump(); }, { passive:false });
+    canvas.addEventListener('touchstart', function(e){ e.preventDefault(); jump(); }, { passive:false });
 
-    rafId = requestAnimationFrame(gameLoop);
-  })();
+    // ---- START ----
+    rafId = window.requestAnimationFrame(gameLoop);
+  });
   </script>
 </body>
 </html>
+
